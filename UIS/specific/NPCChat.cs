@@ -16,7 +16,7 @@ public class NPCChat : UI, UIAction {
 				GManager.playerLocation.gameObject.SendMessage ("endMove");
 				GManager.playerLocation.gameObject.SendMessage ("FaceTo", transform);
 				gameObject.SendMessage ("FaceTo", GManager.playerLocation);
-				ChatController.setSeq (transform.GetChild (0).gameObject, controller.type, controller.seqId);
+				//ChatController.setSeq (transform.GetChild (0).gameObject, controller.type, controller.seqId);
 				GManager.GSState = GS.C;
 			}
 		}

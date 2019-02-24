@@ -5,9 +5,10 @@ using UnityEngine;
 public class InventoryItem : UI, UIAction {
 	public bool isEquipmentInv = false;
 	void UIAction.doAction(MParams par){
-		if (par.phase == TouchPhase.Ended && !GManager.self.UIStats.activeSelf){
+		if (par.phase == TouchPhase.Ended){
 			Inventory selfinv = (isEquipmentInv) ? GManager.equipment : GManager.inventory;
-			Item self = selfinv.getItem (transform.GetChild (0).gameObject);
+			Item selfE = selfinv.getItem (transform.GetChild (0).gameObject);
+            GManager.items.TryGetValue(selfE.name, out Item self);
 			if (self != null) {
 				if (!isEquipmentInv) {
 					GManager.self.UIStats.SetActive (true);

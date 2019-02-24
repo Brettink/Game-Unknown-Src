@@ -16,9 +16,9 @@ public class ToggleStat : UI, UIAction
 	new void Start(){
 		base.Start ();
 		selfImg = GetComponent<Image> ();
-		equip = transform.parent.GetChild (0).gameObject;
-		stats = transform.parent.GetChild (1).gameObject;
-		title = transform.parent.GetChild (2).GetComponent<Text> ();
+		equip = transform.parent.parent.GetChild (0).gameObject;
+		stats = transform.parent.parent.GetChild (1).gameObject;
+		title = transform.parent.parent.GetChild (2).GetComponent<Text> ();
 		equip.SetActive (true);
 		stats.SetActive (false);
 	}

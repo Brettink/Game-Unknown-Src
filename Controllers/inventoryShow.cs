@@ -6,9 +6,9 @@ using System;
 public class inventoryShow : MonoBehaviour {
 
 	private STATE state = STATE.NONE;
-	private GameObject panel, equip;
+    private GameObject panel;
 	public bool dir = false;
-	Quaternion rest = Quaternion.Euler (new Vector3 (0f, -90f, 0f));
+	Quaternion rest = Quaternion.Euler (new Vector3 (0f, -95f, 0f));
 	Quaternion outP = Quaternion.Euler (new Vector3 (0f, 0f, 0f));
 
 	void show(bool dir){
@@ -20,8 +20,9 @@ public class inventoryShow : MonoBehaviour {
 	}
 	void Start () {
 		panel = GameObject.FindGameObjectWithTag ("inventory");
-		equip = GameObject.FindGameObjectWithTag ("equip");
-	}
+        GManager.self.UIPivot.SetActive(false);
+
+    }
 
 	bool moveAndCheck(GameObject check, float posTo, bool type){
 		Vector3 pos = check.transform.localPosition;
@@ -59,14 +60,18 @@ public class inventoryShow : MonoBehaviour {
 				break;
 			}
 			case STATE.MOVING_PANEL: {
-				float posTo = (dir) ? -1.36f : 1.36f;
+				float posTo = (dir) ? -.96f : .83f;
 				Quaternion rotTo = (dir) ? outP : rest;
-				Quaternion rotGet = equip.transform.localRotation;
+				Quaternion rotGet = GManager.self.UIPivot.transform.localRotation;
 				Quaternion newRot = Quaternion.Lerp (rotGet, rotTo, 0.4f);
-				equip.transform.localRotation = newRot;
+                GManager.self.UIPivot.transform.localRotation = newRot;
+                if (GManager.self.UIPivot.activeSelf != dir) {
+                    GManager.self.UIPivot.SetActive(dir);
+                }
 				if (!moveAndCheck (panel, posTo, false)){
 					Quaternion rot = (dir) ? outP : rest;
-					equip.transform.localRotation = rot;
+                    panel.transform.localPosition = Vector3.up * posTo;
+                    GManager.self.UIPivot.transform.localRotation = rot;
 					state = (dir) ? STATE.NONE : STATE.MOVING_SELF;
 				}
 				break;

@@ -7,39 +7,49 @@ using System.Linq;
 using System.Xml.Linq;
 using System.IO;
 using UnityEngine.UI;
+using System.Runtime.Serialization.Formatters.Binary;
 
 public class GManager : MonoBehaviour {
 
     public bool doTesting = false;
 	public static GManager self;
+    public static int tick = 0;
 	public static float speed = 0.015f;
+    public static string worldName = "Testing";
 	private float dist = 15f;
+    public float aspectRatio = 0f;
 	public const int MAX_CHUNK_SIZE = 25;
 	public GameObject empty;
 	float randX, randY, randZ, gRandX, gRandY, gRandZ;
-	public GameObject GridObject, TilePrefab, PickupPrefab;
+    public GameObject GridObject, TilePrefab, PickupPrefab;
+    public Transform playerHead;
 	public GameObject ambience;
 	public static GameObject selectBox, selBox, selCirc;
+    public static Vector2 notZero = new Vector2(0.00001f, 0.00001f);
+    public static Color[] colorMap = new Color[7];
+    public static Vector3[] baseMainVerts;
+    public static Dictionary<SIDE, HashSet<int>> 
+        sideVerts = new Dictionary<SIDE, HashSet<int>>();
 
 	public static Transform playerLocation, playerFollowL;
 	public static Animator playerAnim;
 
-	public static List<GameObject> enemies;
+	//public static List<GameObject> enemies;
 
 	public GameObject UINormal, UIAction, UIEdit, UIInventory, UIMove, UIChat, UIStats, chatCam;
-	public GameObject UIHaS;
+	public GameObject UIHaS, UICompass, UIOptions, UIPivot;
 
+    private Dictionary<EnemyType, GameObject> enemyPrefabs = new Dictionary<EnemyType, GameObject>();
 	private static Dictionary <string, GameObject> UIs= new Dictionary<string, GameObject>();
 	private static Dictionary <string, GameObject> worldUIs = new Dictionary<string, GameObject>();
 	public static Dictionary<string, Chats> npcChats = new Dictionary<string, Chats>();
-	public static List<Pos> chunks = new List<Pos> ();
 	public static List<Pos> pickups = new List<Pos> ();
 	public static List<Pos> enemiesL = new List<Pos> ();
-	public static Item[] items;
+    public static Dictionary<string, Item> items = new Dictionary<string, Item>();
 	public static List<GameObject> selectedTiles = new List<GameObject> ();
 	public static AudioSource soundUI, soundEquip;
 	public static Inventory inventory, equipment;
-	private Vector3 selDefScale = new Vector3(0.5f, 0.25f, 0.5f), selPrev;
+	private Vector3 selDefScale = new Vector3(0.5f, 1f, 0.5f), selPrev;
 	public static Vector3 chatCamPos = new Vector3 (0, 1.72f, 2.15f), chatCamRot = new Vector3(0f, -180f, 0f);
 	private static GS state = GS.L;
 	public static Camera myCam, mainCam, chCam;
@@ -126,6 +136,8 @@ public class GManager : MonoBehaviour {
 		self.UIMove.SetActive (false);
 		self.UIChat.SetActive (false);
 		self.UIHaS.SetActive (true);
+        self.UICompass.SetActive(false);
+        self.UIOptions.SetActive(false);
 		selectBox.SetActive (false);
 		chCam.enabled = false;
 		//chatCam.SetActive (false);
@@ -139,6 +151,7 @@ public class GManager : MonoBehaviour {
 				selectBox.SetActive (false);
 				self.UINormal.SetActive (true);
 				self.UIAction.SetActive (true);
+                self.UICompass.SetActive(true);
 				break;
 			}
 			case GS.I:{
@@ -147,12 +160,14 @@ public class GManager : MonoBehaviour {
 				break;
 			}
 			case GS.C:{
-				chCam.enabled = true;
+                playerLocation.SendMessage("endMove");
+                chCam.enabled = true;
 				self.UIChat.SetActive (true);
 				self.UIChat.SendMessage ("show", true);
 				break;
 			}
 			case GS.E:{
+                playerLocation.SendMessage("endMove");
 				self.UINormal.SetActive (true);
 				self.UIEdit.SetActive (true);
 				self.UIMove.SetActive (true);
@@ -161,6 +176,13 @@ public class GManager : MonoBehaviour {
 				selectBox.SetActive (true);
 				break;
 			}
+            case GS.O: {
+                self.UIOptions.SetActive(true);
+                self.UIHaS.SetActive(false);
+                playerFollowL.SendMessage("endMove");
+                self.UIOptions.SendMessage("Show", true);
+                break;
+            }
 		}
 	}
 
@@ -171,28 +193,57 @@ public class GManager : MonoBehaviour {
 		}
 	}
 
+    public static void convertToSides(Mesh inMesh, Vector3[] baseVerts, ref Dictionary<SIDE, HashSet<int>> dict) {
+        dict.Clear();
+        Color[] colorsB = inMesh.colors;
+        for (int i = 0; i < colorMap.Length + 1; i++) {
+            dict.Add((SIDE)(int)i, new HashSet<int>());
+        }
+        for (int i = 0; i < colorsB.Length; i++) {
+            if (!colorsB[i].Equals(Color.white)) {
+                SIDE index = (SIDE)Array.IndexOf(colorMap, colorsB[i]);
+                if (index < 0) { index = SIDE.NW; }
+                dict.TryGetValue(index, out HashSet<int> setVal);
+                setVal.Add(i);
+                for (int z = 0; z < baseVerts.Length; z++) {
+                    if (i != z) {
+                        if (baseVerts[z].Equals(baseVerts[i])) {
+                            setVal.Add(z);
+                        }
+                    }
+                }
+                dict[index] = setVal;
+            }
+        }
+    }
+
 	// Use this for initialization
 	void Awake () {
+        Input.backButtonLeavesApp = true;
 		self = this;
-		randX = UnityEngine.Random.Range(-100000f, 100000f);
-		randY = UnityEngine.Random.Range(-100000f, 100000f);
-		randZ = UnityEngine.Random.Range(-100000f, 100000f);
-		gRandX = UnityEngine.Random.Range(-100000f, 100000f);
-		gRandY = UnityEngine.Random.Range(-100000f, 100000f);
-		gRandZ = UnityEngine.Random.Range(-100000f, 100000f);
+        colorMap[0] = Color.green;
+        colorMap[1] = Color.blue;
+        colorMap[2] = new Color(0f, 1f, 1f);
+        colorMap[3] = Color.black;
+        colorMap[4] = Color.red;
+        colorMap[5] = new Color(1f, 0f, 1f);
+        colorMap[6] = new Color(1f, 1f, 0f);
+        Mesh tileMesh = TilePrefab.GetComponent<MeshFilter>().sharedMesh;
+        baseMainVerts = tileMesh.vertices;
+        convertToSides(tileMesh, baseMainVerts, ref sideVerts);
+        tileMesh.vertices = baseMainVerts;
 		sideView = false;
 		inventory = new Inventory (GameObject.FindGameObjectWithTag ("inventory"), false);
 		equipment = new Inventory (GameObject.FindGameObjectWithTag ("equipS"), true);
 
 		myCam = GameObject.FindGameObjectWithTag ("Cam2").GetComponent<Camera> ();
 		mainCam = GameObject.FindGameObjectWithTag ("MainCamera").GetComponent<Camera> ();
+
 		soundUI = myCam.transform.GetChild (1).GetComponent<AudioSource> ();
 		soundEquip = myCam.transform.GetChild (2).GetComponent<AudioSource> ();
 
 		playerLocation = GameObject.FindGameObjectWithTag ("Player").GetComponent<Transform> ();
 		//playerAnim = playerLocation.GetComponent<Animator> ();
-		enemies = GameObject.FindGameObjectsWithTag ("Enemy").ToList ();
-		enemies.ForEach (t=>enemiesL.Add (new Pos(t)));
 		//playerFollowL = GameObject.FindGameObjectWithTag ("PlayerFollow").GetComponent<Transform> ();
 		UIInventory.SetActive (false);
 		UINormal.SetActive (false);
@@ -201,6 +252,8 @@ public class GManager : MonoBehaviour {
 		UIChat.SetActive (false);
 		UIStats.SetActive (false);
 		UIHaS.SetActive (false);
+        UICompass.SetActive(false);
+        UIOptions.SetActive(false);
 		chCam = chatCam.GetComponent<Camera> ();
 		chCam.enabled = false;
 		//chatCam.SetActive (false);
@@ -209,6 +262,10 @@ public class GManager : MonoBehaviour {
 		selBox.SetActive (false);
 		selCirc.SetActive (false);
 		selectBox = selBox;
+        foreach (EnemyType type in Enum.GetValues(EnemyType.archer.GetType())) {
+            GameObject prefab = Resources.Load<GameObject>("Prefabs/enemy/" + type.ToString());
+            enemyPrefabs.Add(type, prefab);
+        }
 	}
 
 	void OnSheath(bool sheath){
@@ -237,41 +294,9 @@ public class GManager : MonoBehaviour {
 			&& t.myTile.activeSelf
 		).ToList ();
 		yield return null;
-		tilesToDisable.ForEach (t=> {
-                bool cont = true;
-                if (toCheck == chunks) {
-                    Chunk ch = t.myTile.GetComponent<Chunk>();
-                    if (ch.stillLoading) {
-                        cont = false;
-                    } else {
-                        if (ch.r != null) {
-                            ch.StopCoroutine(ch.r);
-                        }
-                    }
-                }
-                if (cont) {
-                    t.myTile.SetActive(false);
-                }
-            }
-        );
-		yield return null;
 		tilesToEnable.ForEach (t=>t.myTile.SetActive (true));
 		//yield return new WaitForSeconds (1f);
 		yield return null;
-		if (toCheck == chunks) {
-			int playerX = (int)playerPos.x / MAX_CHUNK_SIZE;
-			int playerZ = (int)playerPos.z / MAX_CHUNK_SIZE;
-			for (int x = playerX - 1; x <= playerX + 1; x++) {
-				for (int z = playerZ - 1; z <= playerZ + 1; z++) {
-					Vector2 chunkPos = new Vector2 (x, z);
-					if (!chunkGen.Contains (chunkPos)){
-						chunkGen.Add (chunkPos);
-						StartCoroutine (generate(chunkPos));
-						yield return null;
-					}
-				}
-			}
-		}
 		StartCoroutine (doCheck(toCheck, minusTDist));
 		yield return null;
 	}
@@ -312,55 +337,87 @@ public class GManager : MonoBehaviour {
 		return data;
 	}
 
-	public void addPickup(GameObject obj, Item item){
+	public void addPickup(GameObject obj, IEBaseMesh item){
 		addPickup (obj, item, Vector3.zero);
 	}
 
-	public void addPickup(GameObject obj, Item item, Vector3 toVect){
+	public void addPickup(GameObject obj, IEBaseMesh item, Vector3 toVect){
 		obj.AddComponent<Pickup>().setItem (item);
 		toVect.y = 500f;
 		obj.GetComponent<Rigidbody> ().AddRelativeForce (toVect);
 	}
 
-	IEnumerator generate(Vector2 start){
+    public void LoadDefault(WorldInfo info = null) {
+        if (info != null) {
+            playerLocation.position = info.playerPos;
+            randX = info.seeds[0]; randY = info.seeds[1]; randZ = info.seeds[2];
+            gRandX = info.seeds[3]; gRandY = info.seeds[4]; gRandZ = info.seeds[5];
+        } else {
+            randX = UnityEngine.Random.Range(-100000f, 100000f);
+            randY = UnityEngine.Random.Range(-100000f, 100000f);
+            randZ = UnityEngine.Random.Range(-100000f, 100000f);
+            gRandX = UnityEngine.Random.Range(-100000f, 100000f);
+            gRandY = UnityEngine.Random.Range(-100000f, 100000f);
+            gRandZ = UnityEngine.Random.Range(-100000f, 100000f);
+            ChunkManager.worldInfo = 
+                new WorldInfo(new float[] { randX, randY, randZ, gRandX, gRandY, gRandZ });
+        }
+        string path = Application.streamingAssetsPath;
+        string[] dirs = Enum.GetNames(NPCType.goblin.GetType());
+        foreach (string dir in dirs) {
+            Chats chatD = new Chats();
+            String dir2 = path + "/chats/" + dir + "/chat";
+            bool brk = false;
+            for (int i = 0; !brk; i++) {
+                string[] fileData = getData(dir2 + i + ".txt", out brk).Split("\n"[0]);
+                if (!brk) {
+                    chatD.AddChat(fileData);
+                }
+            }
+            npcChats.Add(Path.GetFileName(dir), chatD);
+        }
+        bool noth;
+        string data = getData(path + "/items.json", out noth);
+        ItemList listItems = JsonUtility.FromJson<ItemList>(data);
+        listItems.weapons.ForEach(w => items.Add(w.name, new IWeapon(w)));
+        listItems.armours.ForEach(a => items.Add(a.name, new IArmor(a)));
+        listItems.placeAbles.ForEach(p => items.Add(p.name, new IPlaceable(p)));
+        listItems.consumables.ForEach(c => items.Add(c.name, new IConsume(c)));
+        StartCoroutine(doCheck(pickups, 0f));
+        StartCoroutine(doCheck(enemiesL, -5f));
+    }
+
+    public void LoadPlayerInfo() {
+        Item newItem = items["Fire Sword"].copy(1);
+        Item newItem2 = items["Aegis Sword"].copy(1);
+        Item newItem3 = items["Leather Chaps"].copy(1);
+        Item newItem4 = items["Leather Chest"].copy(1);
+        Item newItem5 = items["Leather Helm"].copy(1);
+        StartCoroutine(inventory.addItem(newItem));
+        StartCoroutine(inventory.addItem(newItem2));
+        StartCoroutine(inventory.addItem(newItem3));
+        StartCoroutine(inventory.addItem(newItem4));
+        StartCoroutine(inventory.addItem(newItem5));
+        ambience.GetComponent<AudioSource>().Play();
+        GameObject chest = GameObject.FindGameObjectWithTag("Respawn");
+        chest.GetComponent<Rigidbody>().isKinematic = false;
+    }
+
+	public IEnumerator generate(Vector2 start){
 		start = start * MAX_CHUNK_SIZE;
-		if (start == Vector2.zero) {
-			string path = Application.streamingAssetsPath;
-			string[] dirs = Enum.GetNames (NPCType.goblin.GetType ());
-			foreach (string dir in dirs){
-				Chats chatD = new Chats ();
-				String dir2 = path + "/chats/" + dir + "/chat";
-				bool brk = false;
-				for (int i = 0; !brk; i++){
-					string[] fileData = getData (dir2 + i + ".txt", out brk).Split ("\n" [0]);
-					if (!brk) {
-						chatD.AddChat (fileData);
-					}
-				}
-				npcChats.Add (Path.GetFileName (dir), chatD);
-			}
-			bool noth;
-			string data = getData (path + "/items.json", out noth);
-			ItemList listItems = JsonUtility.FromJson<ItemList> (data);
-			int id = 0;
-			items = new Item[listItems.items.Length];
-			foreach(ItemFile itemFile in listItems.items){
-				items [id] = new Item (itemFile);
-				id++;
-			}
-            StartCoroutine(doCheck(chunks, -30f));
-            StartCoroutine(doCheck(pickups, 0f));
-            StartCoroutine(doCheck(enemiesL, 0f));
+        Vector2Int startInt = new Vector2Int((int)start.x, (int)start.y);
+		if (start == Vector2Int.zero) {
+            LoadDefault();
         }
 		int selName = 0;
-		Vector3 chunkStart = new Vector3 (start.x, 0, start.y);
+		Vector3Int chunkStart = new Vector3Int ((int)start.x, 0, (int)start.y);
 		GameObject newChunk = Instantiate (empty, chunkStart,
 									Quaternion.identity, GridObject.transform);
         Chunk ch = newChunk.GetComponent<Chunk>();
-        ch.setPos(new Vector2Int((int)start.x, (int)start.y));
+        ch.setPos(startInt);
         newChunk.name = "chunk" + start.x + " " + start.y + "";
-		chunks.Add (new Pos(newChunk));
-		Vector2 scaleS = start / 10f;
+		ChunkManager.chunks.Add (startInt, ch);
+		Vector2 scaleS = ((Vector2)start)/ 10f;
 		float halfSize = (MAX_CHUNK_SIZE / 2) / 10f;
         int at1 = 0;
         float[,] heights = new float[MAX_CHUNK_SIZE, MAX_CHUNK_SIZE];
@@ -371,16 +428,20 @@ public class GManager : MonoBehaviour {
 			for (float x = -halfSize; x <= halfSize; x+=.1f, at++) {
 				Loader.loading = true;
 				x = (float)Math.Round (x, 2);
-				float tile = Mathf.PerlinNoise ((x + scaleS.x + randX + randZ), (z + scaleS.y + randY + randZ))*5f;
+                float tile = 0f, tile2 = 0f;
+                tile = Mathf.PerlinNoise((x + scaleS.x + randX + randZ), (z + scaleS.y + randY + randZ)) * 5f;
+                tile2 = Mathf.PerlinNoise((x + scaleS.x + gRandX + gRandZ), (z + scaleS.y + gRandY + gRandZ)) * 4f;
                 //tile = (float)Math.Round(tile, 3);
-                tile += prevTiles [at];
-				prevTiles [at] = tile;
-				if (tile <= 0f){ tile = 0.01f; }
+                tile += prevTiles[at];
+                prevTiles[at] = tile;
+
+                int t = (int)clampF(tile2, 0, 3);
+                if (tile <= 0f) { tile = 0.01f; }
 				Vector3 pos = new Vector3 (x*10f, tile, z*10f);
 				if (x == 0f && z == 0f && start == Vector2.zero){
-					playerLocation.position = Vector3.up * (tile + 0.25f);
+					playerLocation.position = Vector3.up * (tile + 1f);
 				}
-				if (x %1f == 0f && z == 1f){
+				/*if (x %1f == 0f && z == 1f){
 					GameObject newPickup = Instantiate (PickupPrefab, pos, Quaternion.identity, newChunk.transform);
 					newPickup.transform.localPosition = new Vector3 (pos.x, tile + .5f, pos.z);
 					int type = UnityEngine.Random.Range (0, items.Length);
@@ -388,17 +449,28 @@ public class GManager : MonoBehaviour {
 					addPickup (newPickup, copy, Vector3.zero);
 					pickups.Add (new Pos(newPickup));
 					//newPickup.SetActive (false);
-				}
+				}*/
 				GameObject newTile = Instantiate (TilePrefab, pos, Quaternion.identity, newChunk.transform);
 				adjustment adj = newTile.GetComponent<adjustment> ();
-				float tile2 = Mathf.PerlinNoise ((x + scaleS.x + gRandX + gRandZ), (z + scaleS.y + gRandY + gRandZ))*4f;
-				int t =  (int)clampF (tile2, 0, 3);
+
 				adj.type = t;
 				newTile.transform.localPosition = pos;
-				GameObject arrSel = newTile.transform.GetChild (2).gameObject;
+				GameObject arrSel = newTile.transform.GetChild (3).gameObject;
 				arrSel.name = start.x + "" + start.y + selName;
 				selName++;
                 heights[at, at1] = tile;
+                
+                float chance = (tile + tile2);
+                if (chance >= 3.595f && chance <= 3.6f) {
+                    adj.SetPlacer(items["Path1"] as IPlaceable);
+                    int id = (int)map(chance, 3.595f, 3.6f, 0, enemyPrefabs.Count()-1);
+                    GameObject enemySpawn = Instantiate(enemyPrefabs[(EnemyType)id]);
+                    enemySpawn.GetComponent<Rigidbody>().isKinematic = false;
+                    Vector3 pp = Vector3.up*2f;
+                    enemySpawn.transform.position = pos+(chunkStart) + pp;
+                    enemySpawn.SetActive(false);
+                    enemiesL.Add(new Pos(enemySpawn));
+                }
 			}
             yield return null;
 		}
@@ -406,28 +478,22 @@ public class GManager : MonoBehaviour {
         yield return null;
         Loader.loading = false;
 		if (start == Vector2.zero) {
-			playerLocation.gameObject.GetComponent<Rigidbody> ().isKinematic = false;
-			GSState = GS.N;
-			Item newItem = items [0].copy (1);
-			Item newItem2 = items [1].copy (1);
-			StartCoroutine (inventory.addItem (newItem));
-			StartCoroutine (inventory.addItem (newItem2));
-			ambience.GetComponent<AudioSource> ().Play ();
-            GameObject chest = GameObject.FindGameObjectWithTag("Respawn");
-            chest.GetComponent<Rigidbody>().isKinematic = false;
-			enemies.ForEach ((GameObject obj) => {
-				obj.GetComponent<Rigidbody> ().isKinematic = false;
-				//obj.SendMessage ("move", (Vector3.back / 25f));
-				//obj.SendMessage ("contToMove", true);
-			});
-		}
+            ChunkManager.worldInfo.playerPos = GManager.playerLocation.position;
+            ChunkManager.currAreas.Add(new ChunkArea(0, 0));
+            ChunkManager.self.SaveWorld();
+            LoadPlayerInfo();
+            playerLocation.gameObject.GetComponent<Rigidbody>().isKinematic = false;
+            ChunkManager.doneFirstload = true;
+            GSState = GS.N;
+        }
 		yield return null;
 	}
-	bool done = false;
+	public static bool done = false;
     public static Vector3[] baseVerts;
     public static int[] baseTrigs;
     public void setupDefPlane() {
-        int size = (GManager.MAX_CHUNK_SIZE * 2);
+        int size = (MAX_CHUNK_SIZE * 2);
+        float hfSize = (MAX_CHUNK_SIZE / 2f) - .25f;
         int aY = 0;
         for (int y = 0; y < size; y += 2, aY++) {
             int aX = 0;
@@ -440,7 +506,7 @@ public class GManager : MonoBehaviour {
         baseVerts = new Vector3[(size + 1) * (size + 1)];
         for (int i = 0, y = 0; y <= size; y++) {
             for (int x = 0; x <= size; x++, i++) {
-                baseVerts[i] = new Vector3((x / 2f) - 12.25f, 0f, (y / 2f) - 12.25f);
+                baseVerts[i] = new Vector3((x / 2f) - hfSize, 0f, (y / 2f) - hfSize);
             }
         }
         baseTrigs = new int[size * size * 6];
@@ -454,14 +520,17 @@ public class GManager : MonoBehaviour {
         }
     }
 
+    void FixedUpdate() {
+        if (ChunkManager.doneFirstload)tick++;
+        if (tick > 24000) { tick = 0; }
+    }
+
 	// Update is called once per frame
 	void Update () {
+        Debug.Log(tick);
 		if (!done){
             if (!doTesting) {
                 setupDefPlane();
-                chunkGen.Add(Vector2.zero);
-                StartCoroutine(generate(Vector2.zero));
-                //StartCoroutine (generate(new Vector2(1, 0)));
                 done = true;
             } else {
                 Loader.loading = false;
@@ -477,16 +546,17 @@ public class GManager : MonoBehaviour {
 				if (Physics.Raycast (rayCast, out hit)) {
 					TouchPhase touchPhase = point.phase;
 					if (UIs.ContainsKey (hit.collider.name)){
-						GameObject UI;
-						UIs.TryGetValue (hit.collider.name, out UI);
-						UI.SendMessage ("UIAction.doAction", new MParams(hit, touchPhase));
+                        try {
+                            UIs.TryGetValue(hit.collider.name, out GameObject UI);
+                            UI.SendMessage("UIAction.doAction", new MParams(hit, touchPhase));
+                        } catch (Exception e) {
+                            e.ToString();
+                        }
 					} else  {
-						playerLocation.gameObject.SendMessage ("endMove");
 						Ray rayCast2 = myCam.ScreenPointToRay (pointer);
 						if (Physics.Raycast (rayCast2, out hit)) {
 							if (worldUIs.ContainsKey (hit.collider.name)){
-								GameObject UI;
-								worldUIs.TryGetValue (hit.collider.name, out UI);
+								worldUIs.TryGetValue (hit.collider.name, out GameObject UI);
 								UI.SendMessage ("UIAction.doAction", new MParams(hit, touchPhase));
 							} else if (hit.collider.name == "Cube(Clone)") {
 								if (GSState == GS.E && (editType == ES.SS || editType == ES.CS)) {
@@ -496,7 +566,7 @@ public class GManager : MonoBehaviour {
 									if (touchPhase == TouchPhase.Began) {
 										selectedTiles.Clear ();
 										selectedTiles.Add (hit.collider.gameObject);
-										hit.collider.SendMessage ("selEnable");
+										hit.collider.gameObject.SendMessage ("selEnable");
 										addIn.y += 0.35f;
 										selectBox.transform.localScale = loggy;
 										selectBox.transform.position = addIn;
@@ -510,7 +580,7 @@ public class GManager : MonoBehaviour {
 											//float plusZ = (hit.transform.position.z - selPrev.z);
 											newScale.x -= 0.05f;
 											newScale.z -= 0.05f;
-											newScale.y = 0.25f;
+											newScale.y = 1f;
 											selectBox.transform.localScale = newScale;
 											//Vector3 newPos = new Vector3 (selPrev.x + plusX, selPrev.y, selPrev.z + plusZ);
 											//selectBox.transform.position = newPos;
@@ -529,12 +599,12 @@ public class GManager : MonoBehaviour {
 						&& point.phase == TouchPhase.Began
 						&& point.phase != TouchPhase.Moved) {
 					Vector3 vec = Camera.main.ScreenToViewportPoint (pointer);
-					if (vec.x <= 0.5f) {
+					if (vec.x <= 0.5f && vec.y<2f/3f) {
 						showMove = true;
 						vec.x = GManager.map (vec.x, 0, 0.5f, 0f, 14f);
 						vec.x = GManager.clampF (vec.x, 4f, 10.5f);
 						vec.y = GManager.map (vec.y, 1f, 0f, 0f, -16f);
-						vec.y = GManager.clampF (vec.y, -12f, -4f);
+						vec.y = GManager.clampF (vec.y, -12f, -8f);
 						UIMove.transform.localPosition = vec;
 					}
 				}

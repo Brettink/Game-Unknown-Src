@@ -6,7 +6,9 @@ public class UIContMove : UI, UIAction {
 
 	void UIAction.doAction(MParams par){
 		if (GManager.GSState != GS.E) {
-			if (par.phase == TouchPhase.Moved || par.phase == TouchPhase.Began) {
+			if (par.phase == TouchPhase.Moved || 
+                par.phase == TouchPhase.Began || 
+                par.phase == TouchPhase.Stationary) {
 				GManager.playerLocation.gameObject.SendMessage ("contToMove", true);
 			}
 		}

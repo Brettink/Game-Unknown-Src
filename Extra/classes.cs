@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System;
@@ -13,10 +13,17 @@ using UnityEngine.UI;
 public class EquipObject{
 	public MeshFilter mesh;
 	public MeshRenderer mat;
+    public SkinnedMeshRenderer rend;
+    public BoxCollider col;
 
-	public EquipObject(MeshFilter mesh, MeshRenderer mat){
+	public EquipObject(MeshFilter mesh, MeshRenderer mat, BoxCollider col){
 		this.mesh = mesh; this.mat = mat;
+        this.col = col;
 	}
+    public EquipObject(SkinnedMeshRenderer rend, BoxCollider col) {
+        this.rend = rend;
+        this.col = col;
+    }
 }
 
 public class MParams{
@@ -50,84 +57,234 @@ public class Modifier{
 
 [Serializable]
 public class ItemList: IDisposable {
-	public ItemFile[] items;
+	public List<ItemWeaponFile> weapons;
+    public List<ItemArmourFile> armours;
+    public List<ItemPlaceableFile> placeAbles;
+    public List<ItemConsumeFile> consumables;
 
     public void Dispose()
     {
-        items = null;
+        weapons = null;
+        armours = null;
+        placeAbles = null;
     }
 }
 
 [Serializable]
-public class ItemFile: IDisposable {
+public class ItemBaseFile: IDisposable {
 	public string name = "";
 	public int maxCount = 0;
 	public string model = "";
-	public Type type = Type.Equip;
-	public EType equipType = EType.None;
-	public List<Modifier> mods = new List<Modifier> ();
 
-    public void Dispose()
-    {
+    public void Dispose(){}
+}
+[Serializable]
+public class ItemEquipFile: ItemBaseFile{
+    public List<Modifier> mods = new List<Modifier>();
+    new public void Dispose() {
+        base.Dispose();
         mods = null;
+    }
+}
+[Serializable]
+public class ItemWeaponFile: ItemEquipFile {
+    new public void Dispose() {
+        base.Dispose();
+    }
+}
+[Serializable]
+public class ItemArmourFile: ItemEquipFile {
+    public EType type = EType.chestS;
+    public List<string> bones = new List<string>();
+    new public void Dispose() {
+        base.Dispose();
+        bones = null;
+    }
+}
+[Serializable]
+public class ItemPlaceableFile: ItemBaseFile {
+    new public void Dispose() {
+        base.Dispose();
+    }
+}
+[Serializable]
+public class ItemConsumeFile: ItemEquipFile {
+    new public void Dispose() {
+        base.Dispose();
+    }
+}
+
+[Serializable]
+public class WorldInfo {
+    public float[] seeds;
+    public SerialVector3 playerPos;
+    public WorldInfo(float[] seeds, SerialVector3 playerPos) {
+        this.seeds = seeds;
+        this.playerPos = playerPos;
+    }
+    public WorldInfo(float[] seeds) {
+        this.seeds = seeds;
+    }
+}
+
+[Serializable]
+public class EnemyInfo {
+    public SerialVector3 spawnPos = Vector3.zero;
+    public SerialVector3 currPos = Vector3.zero;
+    int type = 0;
+    float percHealth;
+    public EnemyInfo(SerialVector3 spawnPos, int type, float percHealth) {
+        this.spawnPos = spawnPos; this.type = type; this.percHealth = percHealth;
+    }
+}
+
+[Serializable]
+public class ChunkArea {
+    public int iX, iZ;
+    public Dictionary<SerialVector3, ChunkInfo> chunks = new Dictionary<SerialVector3, ChunkInfo>();
+    public ChunkArea(int iX, int iZ, Dictionary<SerialVector3, ChunkInfo> chunks) {
+        Set(iX, iZ);
+        this.chunks = chunks;
+    }
+    public ChunkArea(int iX, int iZ) {
+        Set(iX, iZ);
+    }
+    public void Set(int iX, int iZ) {
+        this.iX = iX; this.iZ = iZ;
+    }
+}
+
+[Serializable]
+public class ChunkInfo {
+    public Dictionary<int, TileInfo> tiles = new Dictionary<int, TileInfo>();
+    public ChunkInfo (Dictionary<int, TileInfo> tiles) {
+        this.tiles = tiles;
+    }
+}
+
+[Serializable]
+public class TileInfo {
+    public float height;
+    public int type;
+    public string placerName;
+    public TileInfo(float height, int type, string placerName) {
+        this.height = height; this.type = type;
+        this.placerName = placerName;
     }
 }
 
 public class Item: IDisposable {
 	public string name = "";
 	public int maxCount = 0, count = 0;
-	public Mesh mesh;
-	public Material[] mats;
 	public Sprite icon;
-	public Type type = Type.Equip;
-	public EType equipType = EType.None;
-	private WType wType = WType.slotR;
-	public List<Modifier> mods = new List<Modifier> ();
+    public string addin = string.Empty, prefix = string.Empty;
+    public string baseLocation;
 
 	public Item(){}
-	public Item(ItemFile itemIn){
-		name = itemIn.name;
-		mods = new List<Modifier> (itemIn.mods);
-		maxCount = itemIn.maxCount;
-		string baseLocation = "items/" + itemIn.model + "/";
-		string modelLocation = baseLocation + itemIn.model + "M";
-		string iconLocation = baseLocation + itemIn.model + "I";
-		mesh = Resources.Load<Mesh> (modelLocation);
-		Material[] matNames = Resources.LoadAll<Material> (modelLocation);
-		int i = 0;
-		mats = new Material[matNames.Length];
-		string matsLocation = baseLocation + itemIn.model + "Mat/";
-		foreach(Material mat in matNames){
-			mats [i] = Resources.Load<Material> (matsLocation + mat.name);
-			i++;
-		}
-		icon = Resources.Load<Sprite> (iconLocation);
-		type = itemIn.type;
-		equipType = itemIn.equipType;
-	}
+	public void Setup(string name, int maxCount, string model){
+		this.name = name;
+		this.maxCount = maxCount;
+        this.baseLocation = "items/" + prefix + model + "/";
+        string iconLocation = baseLocation + model + addin + "I";
+        icon = Resources.Load<Sprite>(iconLocation);
+    }
 
 	public Item copy(int count){
 		Item itemC = new Item ();
-		itemC.name = name; itemC.maxCount = maxCount; itemC.count = count; itemC.mesh = mesh;
-		itemC.mats = mats; itemC.icon = icon; itemC.type = type; itemC.equipType = equipType;
-		itemC.mods = mods;
+		itemC.name = name; itemC.maxCount = maxCount; itemC.count = count;
+        itemC.icon = icon;
 		return itemC;
 	}
 
-	public void setWepType(WType type){
-		wType = type;
-	}
+    public void Dispose(){}
+}
 
-	public string getWepType(){
-		return wType.ToString ();
-	}
-
-    public void Dispose()
-    {
-        mesh.Clear(); mesh = null;
-        mats = null;
-        mods = null;
+public class IEBaseMesh: Item {
+    public Mesh mesh;
+    public Material[] mats;
+    public void Setup(ItemBaseFile itemIn) {
+        base.Setup(itemIn.name, itemIn.maxCount, itemIn.model);
+        string modelLocation = baseLocation + itemIn.model + ((addin == string.Empty) ? "M" : addin);
+        string matsLocation = baseLocation + itemIn.model + "Mat/";
+        Material[] matNames = Resources.LoadAll<Material>
+            ((addin == string.Empty) ? modelLocation : matsLocation);
+        mats = new Material[matNames.Length];
+        int i = 0;
+        foreach (Material mat in matNames) {
+            mats[i] = Resources.Load<Material>(matsLocation + mat.name);
+            i++;
+        }
+        mesh = Resources.Load<Mesh>(modelLocation);
     }
+}
+
+public class Modable: IEBaseMesh {
+    public List<Modifier> mods;
+    public void Setup(ItemEquipFile itemIn) {
+        base.Setup(itemIn);
+    }
+}
+
+public class IConsume: Modable {
+    public IConsume(ItemConsumeFile itemIn) {
+        prefix = "Consumeables/";
+        base.Setup(itemIn);
+        mods = new List<Modifier>(itemIn.mods);
+    }
+}
+
+public class IWeapon: Modable{
+
+    private WType wType = WType.slotR;
+
+    public IWeapon(ItemWeaponFile itemIn) {
+        prefix = "Weapons/";
+        base.Setup(itemIn);
+        mods = new List<Modifier>(itemIn.mods);
+    }
+
+    public void setWepType(WType type) {
+        this.wType = type;
+    }
+
+    public string getWepType() {
+        return this.wType.ToString();
+    }
+}
+
+public class IPlaceable: IEBaseMesh {
+    public Dictionary<SIDE, HashSet<int>> sideIds = new Dictionary<SIDE, HashSet<int>>();
+    public Vector3[] baseVerts;
+    public IPlaceable() { }
+    public IPlaceable(ItemPlaceableFile itemIn) {
+        prefix = "Placeables/";
+        addin = "M";
+        base.Setup(itemIn);
+        baseVerts = mesh.vertices;
+        GManager.convertToSides(mesh, baseVerts, ref sideIds);
+    }
+
+    public bool isEqual(IPlaceable other) {
+        return this.name.Equals(other.name);
+    }
+    /*public IPlaceable copy() {
+        IPlaceable place = new IPlaceable();
+
+    }*/
+}
+
+public class IArmor: Modable {
+    public EType eType = EType.chestS;
+    public List<string> bones = new List<string>();
+    public IArmor(ItemArmourFile itemIn) {
+        prefix = "Armors/";
+        eType = itemIn.type;
+        addin = ((int)eType) + string.Empty;
+        base.Setup(itemIn);
+        mods = itemIn.mods;
+        bones = itemIn.bones;
+    }
+   
 }
 
 public class Inventory{
@@ -227,4 +384,24 @@ public class Chats{
 		}
 		seqs.Add (seq);
 	}
+}
+[Serializable]
+public struct SerialVector3 {
+    public float x, y, z;
+
+    public SerialVector3(float rX, float rY, float rZ) {
+        x = rX; y = rY; z = rZ;
+    }
+
+    public override string ToString() {
+        return String.Format("[{0}, {1}, {2}]", x, y, z);
+    }
+
+    public static implicit operator Vector3(SerialVector3 rValue) {
+        return new Vector3(rValue.x, rValue.y, rValue.z);
+    }
+
+    public static implicit operator SerialVector3(Vector3 rValue) {
+        return new SerialVector3(rValue.x, rValue.y, rValue.z);
+    }
 }

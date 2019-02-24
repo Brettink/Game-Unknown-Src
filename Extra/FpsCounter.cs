@@ -10,6 +10,7 @@ public class FpsCounter : MonoBehaviour
     // for ui.
     private int screenLongSide;
     private Rect boxRect;
+    public Material textColor;
     private GUIStyle style = new GUIStyle();
 
     // for fps calculation.

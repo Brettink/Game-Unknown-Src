@@ -17,11 +17,12 @@ public class DialMove : UI, UIAction {
 		GameObject toMove;
 		if (GManager.GSState == GS.E) {
 			toMove = GManager.playerFollowL.gameObject;
-			adjustVect *= 3f;
+			adjustVect *= 10f;
 		} else {
 			GManager.playerAnim.SetBool ("walking", true);
+            rotMove.eulerAngles = Vector3.up * CameraController.rotation;
 			adjustVect = rotMove * adjustVect;
-			toMove = GManager.playerLocation.gameObject;
+            toMove = GManager.playerLocation.gameObject;
 		}
 
 		if (phase == TouchPhase.Ended) {

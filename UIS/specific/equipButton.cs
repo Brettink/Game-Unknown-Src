@@ -10,10 +10,18 @@ public class equipButton : UI, UIAction {
 		if (par.phase == TouchPhase.Ended){
 			Item selfE = iParams.invItem;
 			Inventory selfinv = iParams.invObj;
-			switch (selfE.type){
-				case Type.Equip:{
-					selfE.setWepType (type);
-					string name = (selfE.equipType != EType.weapon) ? selfE.equipType.ToString () : selfE.getWepType ().ToString ();
+			if (selfE is Modable) {
+				if (!(selfE is IConsume)) {
+                    string name = string.Empty;
+                    if (selfE is IWeapon) {
+                        IWeapon weap = selfE as IWeapon;
+                        weap.setWepType(type);
+                        name = type.ToString();
+                        Debug.Log("Slot: " + name);
+                    } else {
+                        IArmor arm = selfE as IArmor;
+                        name = arm.eType.ToString();
+                    }
 					GameObject there = GManager.equipment.findByName(name);
 					Item item = GManager.equipment.getItem (there);
 					GManager.equipment.insertItem (there, selfE);
@@ -24,7 +32,7 @@ public class equipButton : UI, UIAction {
 					GManager.playerLocation.gameObject.SendMessage ("addEquip", selfE);
 					GManager.soundEquip.Play ();
 					HAS.self.UpdateE ();
-					break;
+
 				}
 			}
 			GManager.self.UIStats.SendMessage ("Hide");

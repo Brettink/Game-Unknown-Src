@@ -9,17 +9,22 @@ public class Controller : MonoBehaviour {
 	public Animator selfAnimator;
     public bool newModel = true;
 	public AnimationClip walkingAnim, sheathAnimation, jumpAnim, moveJumpAnim;
-	public NPCType type;
+	public EnemyType type;
 	public int seqId = 0;
 	private AudioSource footStep;
-	private Transform coll;
 	public Rigidbody body;
 	private bool isJump = false;
 	private bool isMoving = false;
-	private bool contMove = false;
+    private bool contMoveV = false;
+	public bool contMove {
+        get { return contMoveV; }
+        set { contMoveV = value;
+            if (!value) selfAnimator.SetBool("walking", false);
+        }
+    }
 	public static bool hasWeapon = false;
 	public float timeJump = 0f, yAcel = 0f, prevYVel = 0f;
-	private Vector3 moveVect = new Vector3 (0.00001f, 0f, 0.00001f);
+	public Vector3 moveVect = new Vector3 (0.00001f, 0f, 0.00001f);
     private Vector3 colLastPos = Vector3.zero;
 	private float timeToIdleAnim;
 	private List<GameObject> groundCols = new List<GameObject> ();
@@ -45,13 +50,8 @@ public class Controller : MonoBehaviour {
         } else {
             selfAnimator = GetComponent<Animator>();
         }
-		coll = transform. GetChild(1);
 		body = GetComponent<Rigidbody> ();
 		timeToIdleAnim = Time.fixedTime + 10f;
-        if (this.tag == "Enemy") {
-            moveVect = Vector3.forward*.005f;
-            contMove = true;
-        }
     }
 
 	public void Sheath(){
@@ -79,7 +79,7 @@ public class Controller : MonoBehaviour {
         if (selfAnimator.GetFloat ("walkSpeed") > 0.001f){
 			isMoving = true;
 			moveVect = moveBy;
-			float angle = Vector2.SignedAngle (new Vector2 (0.00001f, 0.00001f), new Vector2 (moveBy.x, moveBy.z));
+			float angle = Vector2.SignedAngle (GManager.notZero, new Vector2 (moveBy.x, moveBy.z));
 			this.transform.localRotation = Quaternion.AngleAxis (-angle + 45f, Vector3.up);
 		}
 		if (!selfAnimator.GetBool ("walking")) {
@@ -88,7 +88,15 @@ public class Controller : MonoBehaviour {
 		selfAnimator.SetFloat ("walkSpeed", (float)(Math.Abs (moveBy.magnitude * 20f) + 0.001f));
 	}
 
-	public void Jump(){
+    public void DoMove(Vector3 moveBy) {
+        float angle = Vector2.SignedAngle(GManager.notZero, new Vector2(moveBy.x, moveBy.z));
+        this.transform.rotation = Quaternion.AngleAxis(-angle + 45f, Vector3.up);
+        body.AddForce(moveBy * 100f);
+        //transform.position = GManager.clampVector3 (transform.position, minPos, maxPos);
+        moveVect = moveBy;
+    }
+
+    public void Jump(){
 		if (groundCols.Count () > 0) {
             //isJump = true;
 			StartCoroutine ("DoJump");
@@ -107,7 +115,7 @@ public class Controller : MonoBehaviour {
 		yield return null;
 	}
 
-	void OnCollisionEnter(Collision col){
+	public void OnCollisionEnter(Collision col){
 		if (col.collider.tag == "ground") {
 			if (selfAnimator.GetCurrentAnimatorStateInfo (0).IsTag ("falling")){
 				if (!isJump /*&& selfAnimator.GetFloat ("ySpeed") < -4f*/) {
@@ -149,22 +157,14 @@ public class Controller : MonoBehaviour {
 		}
 	}
 
-	// Update is called once per frame
 	public void Update () {
-		/*if (body.velocity.y < -0.5f){
-			selfAnimator.SetBool ("jump", false);
-			selfAnimator.SetBool ("falling", true);
-		}
-		if (selfAnimator.GetBool ("landed")){
-			selfAnimator.SetBool ("falling", false);
-			selfAnimator.SetBool ("landed", false);
-		}*/
-
 		if (Input.GetKeyUp (KeyCode.A)){
 			sheath = !sheath;
 		}
-
-		body.velocity = GManager.clampVector3 (body.velocity, new Vector3 (-1.5f, -5f, -1.5f), new Vector3 (1.5f, 5f, 1.5f));
+        if (selfAnimator.GetCurrentAnimatorStateInfo(0).IsTag("death")) {
+            selfAnimator.ResetTrigger("die");
+        }
+            body.velocity = GManager.clampVector3 (body.velocity, new Vector3 (-1.5f, -5f, -1.5f), new Vector3 (1.5f, 5f, 1.5f));
 		if (selfAnimator.GetCurrentAnimatorStateInfo (0).IsTag ("idle")){
 			if (Time.fixedTime >= timeToIdleAnim){
 				selfAnimator.SetTrigger ("doIdle");
@@ -179,74 +179,20 @@ public class Controller : MonoBehaviour {
 
 	void LateUpdate(){
 
-        if (this.tag == "Enemy") {
-            if (groundCols.Count() >= 1 && !isJump) {
-                //Jump();
-            }
-        }
-
-        //if (!canJump) {
-
-        //float centerY = (transform.GetChild (2).position.y - transform.position.y) + 0.475f;
-        //coll.localPosition = centerY * Vector3.up;
-        //}
         if (transform.position.y < 0) {
             RaycastHit[] hits = Physics.RaycastAll(transform.position, Vector3.up);
             foreach (RaycastHit hit in hits) {
                 if (hit.collider.tag == "Tile") {
                     Vector3 pos = transform.position;
                     float y = hit.collider.GetComponent<adjustment>().GetYTo();
-                    pos.y = y;
+                    pos.y = y + 1f;
                     transform.position = pos;
                 }
             }
-          //  Debug.Log(colLastPos);
         }
 	}
 
-    public bool CheckPercent(String tag, AnimationClip clip, int layer, int percent) {
-        return CheckPercent(tag, clip, layer, percent, 0);
-    }
-
-    public bool CheckPercent(String tag, AnimationClip clip, int layer, int percent, int dir){
-		if (selfAnimator.GetCurrentAnimatorStateInfo (layer).IsTag (tag)){
-			AnimatorStateInfo aniClip = selfAnimator.GetCurrentAnimatorStateInfo (layer);
-			float currentFrame = (aniClip.normalizedTime * clip.averageDuration) % clip.averageDuration;
-			float perC = currentFrame / clip.averageDuration;
-			perC = ((int)(perC * 10));
-            switch (dir) {
-                case 0: return (perC == percent);
-                case -1: return (perC < percent);
-                case 1: return (perC > percent);
-            }
-		}
-		return false;
-	}
-
-	public void FaceTo(Transform other){
-		Vector3 newRot = other.position;
-		newRot.y = transform.position.y;
-		transform.LookAt (newRot);
-	}
-
-	public void DoMove(Vector3 moveBy){
-		float angle = Vector2.SignedAngle (new Vector2 (0.00001f, 0.00001f), new Vector2 (moveBy.x, moveBy.z));
-		this.transform.rotation = Quaternion.AngleAxis (-angle + 45f, Vector3.up);
-		body.AddForce (moveBy*75f);
-		//transform.position = GManager.clampVector3 (transform.position, minPos, maxPos);
-		moveVect = moveBy;
-	}
-
 	public void FixedUpdate () {
-        /*if (selfAnimator.GetCurrentAnimatorStateInfo (0).IsTag ("walk")){
-			AnimatorStateInfo animationClip = selfAnimator.GetCurrentAnimatorStateInfo(0);
-			float currentFrame = (animationClip.normalizedTime * walkingAnim.averageDuration) % walkingAnim.averageDuration;
-			float percent = currentFrame / walkingAnim.averageDuration;
-			percent = ((int)(percent * 10));
-			if (percent % 5 == 0f){
-				GManager.soundStep.Play ();
-			}
-		}*/
         if (CheckPercent("jump", (isMoving)?moveJumpAnim:jumpAnim, 0, 2, 1)) {
             yAcel = (body.position.y - prevYVel);
             prevYVel = body.position.y;
@@ -272,6 +218,30 @@ public class Controller : MonoBehaviour {
 			DoMove (moveVect);
 		}
 
-		//transform.position = new Vector3 (0f, pos.y, pos.z);
 	}
+
+    public bool CheckPercent(String tag, AnimationClip clip, int layer, int percent) {
+        return CheckPercent(tag, clip, layer, percent, 0);
+    }
+
+    public bool CheckPercent(String tag, AnimationClip clip, int layer, int percent, int dir) {
+        if (selfAnimator.GetCurrentAnimatorStateInfo(layer).IsTag(tag)) {
+            AnimatorStateInfo aniClip = selfAnimator.GetCurrentAnimatorStateInfo(layer);
+            float currentFrame = (aniClip.normalizedTime * clip.averageDuration) % clip.averageDuration;
+            float perC = currentFrame / clip.averageDuration;
+            perC = ((int)(perC * 10));
+            switch (dir) {
+                case 0: return (perC == percent);
+                case -1: return (perC < percent);
+                case 1: return (perC > percent);
+            }
+        }
+        return false;
+    }
+
+    public void FaceTo(Transform other) {
+        Vector3 newRot = other.position;
+        newRot.y = transform.position.y;
+        transform.LookAt(newRot);
+    }
 }

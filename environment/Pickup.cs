@@ -4,7 +4,7 @@ using UnityEngine;
 using System.Linq;
 
 public class Pickup : MonoBehaviour {
-	public Item item;
+	public IEBaseMesh item;
 	MeshFilter childMesh;
 	MeshRenderer childRend;
 	// Use this for initialization
@@ -14,7 +14,7 @@ public class Pickup : MonoBehaviour {
 		childRend = child.GetComponent<MeshRenderer> ();
 	}
 
-	public void setItem(Item item){
+	public void setItem(IEBaseMesh item){
 		this.item = item;
 		childMesh.mesh = item.mesh;
 		childRend.materials = item.mats;

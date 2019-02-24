@@ -5,11 +5,11 @@ using UnityEngine;
 public class UIZoom : UIScroll, UIAction {
 
 	void onMove(float curVal){
-		float x = GManager.map (curVal, maxPos, minPos, -2.5f, -8f);
-		float y = GManager.map (curVal, maxPos, minPos, 1f, 7f);
-		float z = GManager.map (curVal, maxPos, minPos, -2.5f, -8f);
-		CameraController.followVector = new Vector3 (x, y, z);
-	}
+        CameraController.followVector.y = GManager.map(curVal, maxPos, minPos, .9f, 5f);
+        CameraController.baseR = GManager.map(curVal, maxPos, minPos, -2f, -10f);
+        float rX = Mathf.Clamp(GManager.map(curVal, maxPos, minPos, 0f, 35f), 0f, 25f);
+        CameraController.selfRot.x = rX;
+    }
 
 	void UIAction.doAction(MParams par){
 		Vector3 point = transform.InverseTransformPoint (par.hit.point);

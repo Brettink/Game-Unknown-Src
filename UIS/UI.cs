@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class UI : MonoBehaviour {
-	Collider selfCollider;
+	public Collider selfCollider;
 	public SpriteRenderer selfSprite;
 	public GameObject self;
 	public bool is3D = false;
@@ -18,4 +18,8 @@ public class UI : MonoBehaviour {
 }
 public interface UIAction{
 	void doAction(MParams par);
+}
+
+public interface UIOptionAction {
+    void MyAction();
 }

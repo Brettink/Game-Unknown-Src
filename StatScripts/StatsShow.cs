@@ -49,32 +49,30 @@ public class StatsShow : MonoBehaviour
 	}
 
 	public void UpdateFields(IParams iParams){
-		Item item = iParams.invItem;
+        Item item = iParams.invItem;
 		itemName.text = "Stats: " + item.name;
 		itemIcon.sprite = item.icon;
 		string statTotal = System.String.Empty;
 		bool newLine = false;
-		foreach (Modifier mod in item.mods){
-			int digis = (int)Math.Floor (Math.Log10 (mod.val) + 1);
-			statTotal += mod.stat.ToString () + ": " + mod.val + ((newLine) ? "\n" : new String(' ', 12-digis));
-		}
+        if (item is Modable) {
+            Modable itEm = item as Modable;
+            foreach (Modifier mod in itEm.mods) {
+                int digis = (int)Math.Floor(Math.Log10(mod.val) + 1);
+                statTotal += mod.stat.ToString() + ": " + mod.val + ((newLine) ? "\n" : new String(' ', 12 - digis));
+            }
+        }
 		stats.text = statTotal;
-		bool isWep = (item.equipType == EType.weapon);
+		bool isWep = (item is IWeapon);
 		btnL.SetActive (isWep);
 		if (isWep){
 			btnLE.iParams = iParams;
 		}
 		btnR.iParams = iParams;
 		string btnText = System.String.Empty;
-		switch (item.type){
-			case Type.Equip:{
-				btnText = (btnL.activeSelf)?"Equip Right":"Equip";
-				break;
-			}
-			case Type.Heal:{
-				btnText = "Heal";
-				break;
-			}
+		if (isWep || item is IArmor) {
+			btnText = (btnL.activeSelf)?"Equip Right":"Equip";
+		} else {
+			btnText = "Heal";
 		}
 		btnTexR.text = btnText;
 	}

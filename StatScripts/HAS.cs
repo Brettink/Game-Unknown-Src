@@ -40,7 +40,7 @@ public class HAS : MonoBehaviour
 	public void UpdateE(){
 		stats.Clear ();
 		baseStats.ToList().ForEach (dict=>stats.Add (dict.Key, dict.Value));
-		foreach (Item item in GManager.equipment.getSlots ().Values.Where (t=>t!=null)){
+		foreach (Modable item in GManager.equipment.getSlots ().Values.Where (t=>t!=null)){
 			foreach (Modifier mod in item.mods){
 				stats [mod.stat] += mod.val;
 			}

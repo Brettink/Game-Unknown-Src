@@ -12,8 +12,7 @@ public class heightI{
     }
 }
 
-public class Chunk : MonoBehaviour
-{
+public class Chunk : MonoBehaviour {
     // Start is called before the first frame update
     Mesh mesh;
     MeshCollider col;
@@ -150,12 +149,35 @@ public class Chunk : MonoBehaviour
         return false;
     }
 
+    public ChunkInfo getChunkInfo() {
+        Dictionary<int, TileInfo> tiles = new Dictionary<int, TileInfo>();
+        for(int i = 0; i < transform.childCount-1; i++) {
+            adjustment tile = transform.GetChild(i + 1).GetComponent<adjustment>();
+            tiles.Add(i, new TileInfo(tile.transform.position.y, tile.type, tile.placerName));
+        }
+        return new ChunkInfo(tiles);
+    }
+
+    public adjustment GetChildObj(int x, int y) {
+        int index = ((GManager.MAX_CHUNK_SIZE * y) + x) + 1;
+        adjustment tile = transform.GetChild(index).GetComponent<adjustment>();
+        return tile;
+    }
+
+    public int[,] GetBlockHeights() {
+        int[,] heights = new int[25, 25];
+        foreach(Vector2Int pos in GManager.heightIMatrix.Keys) {
+            Debug.Log(pos.x + " " + pos.y);
+        }
+        return heights;
+    }
+
     public void pushHeight(Vector3 newPos) {
         Vector2Int intPos = new Vector2Int((int)newPos.x, (int)newPos.z);
         if (GManager.heightIMatrix.ContainsKey(intPos)) {
             GManager.heightIMatrix.TryGetValue(intPos, out int[] ids);
             if (ids != null) {
-                newHeights.Enqueue(new heightI(ids, newPos.y + .25f));
+                newHeights.Enqueue(new heightI(ids, newPos.y + 1f));
             }
         }
     }
@@ -164,7 +186,7 @@ public class Chunk : MonoBehaviour
         foreach (Vector2Int key in GManager.heightIMatrix.Keys) {
             int[] ids = GManager.heightIMatrix[key];
             foreach (int id in ids) {
-                vertices[id].y = heights[key.x, key.y] + .25f;
+                vertices[id].y = heights[key.x, key.y] + 1f;
             }
         }
         mesh.vertices = vertices;
